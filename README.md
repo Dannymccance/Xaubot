@@ -14,6 +14,7 @@
   with a separate UTC timestamp validation bridge. See [Wine MT5 integration](docs/WINE_MT5_SETUP.md).
 - Optional read-only Discord slash commands: `/status`, `/signals`, `/leaderboard`, `/strategies`.
 - Paper research summaries and unit tests with Docker Compose for a VPS.
+- Optional, **off by default**, networkless forward signal journal that starts at an explicit fresh-candle baseline and never backfills missed observations. Requires independently verified broker UTC offset; candidate records are NOT forward trade outcomes. See [forward research](docs/FORWARD_RESEARCH.md).
 
 **Not included:** native MT5 tick/bid-ask collector inside Docker, live execution, broker-valid lot sizing, commissions, swap, news controls, tick-accurate outcomes, GWS Telegram ground-truth matching, calibrated AI probabilities or verified trading performance. The 200 strategies are research hypotheses, not validated edges.
 
@@ -111,6 +112,17 @@ python3 -m xaubot report leaderboard --data-dir data
 Before comparing paper results, run `xaubot audit` to fingerprint the exact CSV and identify source, broker time-offset, gaps, and stale data. This audit cannot independently certify that UTC+2 was the correct broker offset for September and October: verify that separately. Missing candles can reflect market closures rather than connectivity faults. The `backtest` command stores the audit in `backtest.json.metadata.feed_audit` and aborts if the CSV changes while it is running, instead of silently misattributing a replay to a new dataset.
 
 The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, margin, swaps, commissions and order rejection; its reported P&L is **not broker-executable**. A replay of the same data used to design a strategy is exploratory, not out-of-sample validation. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
+
+### Opt-in independent forward candidate study
+
+The historical 201-configuration backtest is exploratory. When the broker
+reopens, first independently verify the server UTC offset. Only then can
+you opt into a separate networkless Docker `forward` profile. It records
+**fresh post-activation M5 candidates**, not historical fill assumptions,
+simulated P&L or genuine trades. It defaults to disabled and will refuse
+to start if `XAUBOT_BROKER_OFFSET_VERIFIED` is not explicitly set to
+`1`. See [docs/FORWARD_RESEARCH.md](docs/FORWARD_RESEARCH.md) for the
+verification and operating procedure.
 
 ## Known limitations and next steps
 
