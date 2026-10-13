@@ -7,7 +7,7 @@
 - 200 deterministic challenger configurations: 10 SMC-related families, 4 confirmation profiles and 5 timing profiles, each with a separate experimental strategy ID.
 - Closed-bar UTC M1/M5/H1/H4/D1 calculations, FVGs, order blocks, role flips, liquidity sweeps and structural targets.
 - Isolated abstract paper simulations with 30/30/40 partial exits and SL-first intrabar ambiguity.
-- Optional OpenAI Responses API commentary (advisory only) and Discord webhook for fresh primary candidates.
+- Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
 - Unit tests and Docker Compose for a VPS.
 
 **Not included:** native MT5 price collector, live execution, broker-valid lot sizing, commissions, swap, news controls, tick-accurate outcomes, GWS Telegram ground-truth matching, calibrated AI probabilities or verified trading performance. The 200 strategies are research hypotheses, not validated edges.
@@ -21,9 +21,22 @@
 5. Check: `docker compose logs --tail=100 -f xaubot`
 6. Candidate journal: `data/candidates.json`
 
-### Turn on Discord and AI
+### Connect your Discord bot and optional AI
 
-In the VPS `.env` file, set `DISCORD_WEBHOOK_URL` and `XAUBOT_SEND_DISCORD=1`, then restart with `docker compose up -d --force-recreate`. Only fresh `GWS_PRIMARY` candidates are posted to your selected Discord channel. The webhook must be your own and should not be pasted into chat or committed.
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications), create or select the Xaubot application and open its **Bot** page. Obtain a bot token. Never paste the token into chats or GitHub.
+2. Install the bot in **your Discord server** using the application installation/OAuth2 setup with the `bot` scope. Grant **View Channel** and **Send Messages** for the chosen text channel (not Administrator). No privileged message-content intent is required for this outbound-only version.
+3. Enable **Developer Mode** in Discord settings and **Copy Channel ID** from the target channel.
+4. In VPS `.env`, set `DISCORD_BOT_TOKEN=...` and `DISCORD_CHANNEL_ID=...`. Keep `XAUBOT_SEND_DISCORD=0` until the connectivity test works.
+5. Build or refresh the container, then send an explicit test message:
+
+```bash
+docker compose build
+docker compose run --rm xaubot python -m xaubot discord-test
+```
+
+6. Set `XAUBOT_SEND_DISCORD=1` and restart with `docker compose up -d --force-recreate` when your M1 feed is fresh and ready.
+
+Only fresh `GWS_PRIMARY` paper candidates are posted. The 200 challengers remain silent. The Discord REST transport sends as your **bot identity**, not a webhook. A Gateway listener and slash commands are not implemented in this first release; those can be added without changing bot credentials.
 
 For optional AI explanations, set `OPENAI_API_KEY` and `OPENAI_MODEL` to a Responses-API-compatible model available on your API account. AI output is limited to a short qualitative explanation; it cannot modify trades, stops, prices or any execution logic. Missing credentials are handled by a deterministic, AI-free signal.
 
