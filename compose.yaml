@@ -1,0 +1,23 @@
+services:
+  xaubot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    # The feed is written externally by your broker export process.
+    # No MT5 credentials or trade placement capabilities in this container.
+    command:
+      - python
+      - -m
+      - xaubot
+      - scan
+      - --csv
+      - /app/data/xauusd_m1.csv
+      - --watch
+      - --poll
+      - "30"
+      - --out
+      - /app/data/candidates.json
+      - --state
+      - /app/data/discord_seen.json
