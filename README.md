@@ -10,6 +10,8 @@
 - Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
 - Read-only MT5 historical M1 exporter (on a machine with a running MT5 terminal),
   atomic price CSV and origin manifest. Details in [MT5 feed guide](docs/MT5_FEED.md).
+- **Ubuntu/Wine MT5 MQL5 EA exporter** (no Windows-only Python API required),
+  with a separate UTC timestamp validation bridge. See [Wine MT5 integration](docs/WINE_MT5_SETUP.md).
 - Optional read-only Discord slash commands: `/status`, `/signals`, `/leaderboard`, `/strategies`.
 - Paper research summaries and unit tests with Docker Compose for a VPS.
 
@@ -19,7 +21,7 @@
 
 1. Clone: `git clone https://github.com/Dannymccance/Xaubot.git && cd Xaubot`
 2. Configure: `cp .env.example .env && mkdir -p data`
-3. Write completed UTC XAUUSD one-minute broker candles to `data/xauusd_m1.csv` using the included [read-only terminal-side exporter](docs/MT5_FEED.md), or a trusted equivalent data source. The terminal-side exporter does **not** run automatically inside Docker. Without the CSV feed, the scanner logs an error and continues to wait.
+3. Write completed UTC XAUUSD one-minute broker candles to `data/xauusd_m1.csv` using the included [Wine MT5/MQL5 exporter and Ubuntu timestamp bridge](docs/WINE_MT5_SETUP.md), the [native terminal-side Python exporter](docs/MT5_FEED.md), or a trusted equivalent data source. Neither terminal-side exporter runs inside the standard Docker container. Without the CSV feed, the scanner logs an error and continues to wait.
 4. Start: `docker compose up -d --build`
 5. Check: `docker compose logs --tail=100 -f xaubot`
 6. Candidate journal: `data/candidates.json`. Current research status: `docker compose exec xaubot python -m xaubot report status --data-dir /app/data`.
@@ -112,6 +114,6 @@ The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, 
 - The original GWS strategy is discretionary; exact entry rules and timing are unconfirmed.
 - GWS message edits often preserve only the final state. The benchmark must not assume final edited text was available at the original send time.
 - Test all 201 configurations on independent forward periods, including direction/session-matched random controls and multiple-testing adjustment.
-- Before execution discussions: implement read-only MT5 data acquisition, proper quote-level simulator, tick-value/lot-step checks, aggregate risk budgets, kill switch and independently verified shadow trading.
+- Before execution discussions: independently verify the MT5 read-only data feeds and Wine stability, implement a quote-level simulator, tick-value/lot-step checks, aggregate risk budgets, kill switch and independently verified shadow trading.
 
 See [development and live-trading gates](docs/ROADMAP.md). Nothing in this repository authorises real-money trading.
