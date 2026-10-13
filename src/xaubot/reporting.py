@@ -113,8 +113,10 @@ def leaderboard_report(root: Path, minimum_closed: int = 20, limit: int = 10) ->
     if initial <= 0:
         return "Paper backtest initial equity is invalid."
     eligible.sort(key=lambda x: (x["equity"]/initial - 1),reverse=True)
+    leverage = data.get("metadata",{}).get("leverage")
+    leverage_label = (f"Max initial-margin leverage 1:{leverage:g}; " if isinstance(leverage,(float,int)) and leverage > 0 else "Leverage not recorded in this legacy backtest; ")
     lines = [f"**XAUBOT | EXPERIMENTAL PAPER RANKING (min {minimum_closed} closed)**",
-             "Results use historical simulation assumptions, not broker-verified returns."]
+             leverage_label + "historical paper only, not broker-verified returns."]
     for index, x in enumerate(eligible[:limit],1):
         roi = 100*(x["equity"]/initial - 1)
         lines.append(f"{index}. {x.get('strategy','unknown')}: {roi:+.2f}% "
