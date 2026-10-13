@@ -9,6 +9,10 @@ description = "Paper-only XAUUSD GWS-style research and 201-strategy laboratory"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+discord = ["discord.py>=2.4,<3"]
+mt5 = ["MetaTrader5>=5.0"]
+
 [project.scripts]
 xaubot = "xaubot.runner:main"
 
