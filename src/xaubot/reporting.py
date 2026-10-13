@@ -87,11 +87,12 @@ def signals_report(root: Path) -> str:
     return "\n".join(report)[:1900]
 
 
-def leaderboard_report(root: Path, minimum_closed: int = 20, limit: int = 10) -> str:
+def leaderboard_report(root: Path, minimum_closed: int = 20, limit: int = 10,
+                       *, backtest_file: Path | None = None) -> str:
     """No ranking until an adequate trade sample; never imply actual performance."""
     if minimum_closed < 1 or limit < 1:
         raise ValueError("Invalid leaderboard threshold")
-    data = _read(root / "backtest.json")
+    data = _read(backtest_file if backtest_file is not None else root / "backtest.json")
     if data is None:
         return "No paper backtest available. Run xaubot backtest with your historical M1 CSV."
     accounts = data.get("strategies", [])
@@ -115,8 +116,14 @@ def leaderboard_report(root: Path, minimum_closed: int = 20, limit: int = 10) ->
     eligible.sort(key=lambda x: (x["equity"]/initial - 1),reverse=True)
     leverage = data.get("metadata",{}).get("leverage")
     leverage_label = (f"Max initial-margin leverage 1:{leverage:g}; " if isinstance(leverage,(float,int)) and leverage > 0 else "Leverage not recorded in this legacy backtest; ")
-    lines = [f"**XAUBOT | EXPERIMENTAL PAPER RANKING (min {minimum_closed} closed)**",
-             leverage_label + "historical paper only, not broker-verified returns."]
+    is_dk = data.get("metadata",{}).get("risk_model") == "DKCAPITAL_GBP_3_LEG_INITIAL_MARGIN"
+    lines = [
+        f"**XAUBOT | {'DKCAPITAL GBP' if is_dk else 'EXPERIMENTAL'} PAPER RANKING (min {minimum_closed} closed)**",
+        leverage_label + "historical paper only, not broker-verified returns.",
+    ]
+    if is_dk:
+        lines.append("DK-style 3 legs, GBP75 per group and GBP150 portfolio on each independent GBP1000 paper account.")
+        lines.append("Stops and targets are XAUBOT-generated hypotheses, NOT provider-supplied levels.")
     for index, x in enumerate(eligible[:limit],1):
         roi = 100*(x["equity"]/initial - 1)
         lines.append(f"{index}. {x.get('strategy','unknown')}: {roi:+.2f}% "
