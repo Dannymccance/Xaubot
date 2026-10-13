@@ -45,8 +45,8 @@ def settle(pos: PaperPosition, b: Bar, spread: float, slippage: float, be_after_
     """Stop first on ambiguous M1 bar. Closes use appropriate bid/ask side."""
     side = pos.candidate.side
     # A BUY closes at bid, a SELL at ask; adverse side is -side.
-    qlow = quote(b, -side, "low", spread)
-    qhigh = quote(b, -side, "high", spread)
+    qlow = quote(b, side, "low", spread)
+    qhigh = quote(b, side, "high", spread)
     stop_hit = qlow <= pos.stop if side == 1 else qhigh >= pos.stop
     events = []
     if stop_hit:
@@ -221,7 +221,7 @@ def main() -> None:
     while True:
         try:
             bars = read_m1(args.csv)
-            result = once(bars,args.send_discord,args.state)
+            result = once(bars,args.send_discord or os.getenv("XAUBOT_SEND_DISCORD","0") == "1",args.state)
             if args.out:
                 _write_json_atomic(args.out,{"generated_at":datetime.now(UTC).isoformat(),
                                              "candidates":result})
