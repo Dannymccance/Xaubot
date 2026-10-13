@@ -1,0 +1,36 @@
+# Xaubot Wine MT5 -> UTC M1 read-only conversion service for jurspan-ai.
+# The command uses the separately-installed xaumt5 MetaTrader 5 terminal.
+# The offset 120 is PROVISIONAL; verify it against live broker server time.
+# Historical datasets spanning broker DST changes must be processed separately.
+# This unit does not start VNC or MetaTrader 5 and never places trades.
+[Unit]
+Description=Xaubot MT5 Wine read-only candle bridge (UTC M1)
+After=local-fs.target
+Documentation=https://github.com/Dannymccance/Xaubot/blob/main/docs/WINE_MT5_SETUP.md
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/Xaubot
+ExecStart=/root/Xaubot/.venv/bin/python -m xaubot.wine_bridge --source /home/xaumt5/.wine-xaubot/drive_c/users/xaumt5/AppData/Roaming/MetaQuotes/Terminal/Common/Files/xaubot_xauusd_m1_server.csv --symbol XAUUSD --broker-utc-offset-minutes 120 --out /root/Xaubot/data/xauusd_m1.csv --watch --poll 30
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+# Do not give a read-only candle converter network or system modification rights.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ReadWritePaths=/root/Xaubot/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
