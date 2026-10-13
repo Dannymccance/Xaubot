@@ -134,6 +134,55 @@ shell commands or MT5 trading APIs. We can make a least-privilege
 systemd unit with an explicit read-only ACL once the actual paths
 are known.
 
+## Part D2: Keep the converter running under systemd (Ubuntu VPS)
+
+Only after the one-off import has succeeded and the **correct UTC offset has
+been verified**, deploy the checked-in systemd service. The provided unit
+matches the current `/root/Xaubot` directory, the dedicated `xaumt5`
+Wine prefix and the MetaQuotes-Demo symbol `XAUUSD`.
+
+```bash
+cd /root/Xaubot
+git pull --ff-only origin main
+sudo install -m 644 deploy/xaubot-wine-bridge.service \
+  /etc/systemd/system/xaubot-wine-bridge.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now xaubot-wine-bridge.service
+sudo systemctl status --no-pager xaubot-wine-bridge.service
+sudo journalctl -u xaubot-wine-bridge.service -n 30 --no-pager
+```
+
+**Note:** The sample unit contains `--broker-utc-offset-minutes 120`, the
+*provisional* UTC+2 hypothesis from the initial Xaubot demo feed. Verify
+this against broker server time and UTC before interpreting historical
+timestamps or using alerts. If it is wrong, stop the service and archive
+the converted feed + manifest before regenerating with the correct offset.
+Do not change the offset on a running already-written feed. The offset
+may also change at the broker's daylight-saving transitions; this simple
+unit has no automatic timezone adjustment.
+
+For a quick progress check, run as root:
+
+```bash
+tail -n 1 /root/Xaubot/data/xauusd_m1.csv
+date -u
+stat -c 'Raw MT5 export updated: %y' \
+  /home/xaumt5/.wine-xaubot/drive_c/users/xaumt5/AppData/Roaming/MetaQuotes/Terminal/Common/Files/xaubot_xauusd_m1_server.csv
+```
+
+The latest feed candle's **closing** time must be recent. The bridge's
+`systemctl active` status alone is not proof that MT5 is exporting. The
+service can be running while its source CSV has stopped updating.
+
+**Important:** The systemd unit restarts the conversion process after a
+reboot; it does **not** restart MT5 or the VNC desktop. The terminal's
+desktop session must be restored independently. Do not reboot the VPS or
+alter any other MT5 services without confirming existing trade activity.
+Since the unit runs as root to access both the isolated Wine directory
+and `/root/Xaubot/data`, keep the installed file permissions as supplied.
+It is restricted from using network sockets and most system writes.
+A dedicated least-privilege service user is a later hardening task.
+
 ## Part E: Start Xaubot scanner
 
 After the CSV is populated and timestamps are verified:
