@@ -84,15 +84,15 @@ def send_discord(candidate: Candidate, ai_note: str) -> None:
     """Post the primary paper candidate through the authorised Discord bot."""
     side = "BUY" if candidate.side == 1 else "SELL"
     message = (
-        f"**XAUBOT | GWS-STYLE {side} | PAPER CANDIDATE**\\n"
-        f"UTC close: {candidate.timestamp.isoformat()} | ID: {candidate.event_id}\\n"
+        f"**XAUBOT | GWS-STYLE {side} | PAPER CANDIDATE**\n"
+        f"UTC close: {candidate.timestamp.isoformat()} | ID: {candidate.event_id}\n"
         f"Entry hypothesis: {candidate.entry_low:.2f} to {candidate.entry_high:.2f} "
-        f"(reference {candidate.ref_price:.2f})\\n"
+        f"(reference {candidate.ref_price:.2f})\n"
         f"SL: {candidate.stop:.2f} | TP1: {candidate.tp1:.2f} | "
-        f"TP2: {candidate.tp2:.2f} | TP3: {candidate.tp3:.2f}\\n"
-        f"TP3 basis: {candidate.tp3_source} | Research score (NOT probability): {candidate.score}\\n"
-        f"Logic: {candidate.rationale}\\n"
-        f"AI advisory: {ai_note[:700]}\\n"
+        f"TP2: {candidate.tp2:.2f} | TP3: {candidate.tp3:.2f}\n"
+        f"TP3 basis: {candidate.tp3_source} | Research score (NOT probability): {candidate.score}\n"
+        f"Logic: {candidate.rationale}\n"
+        f"AI advisory: {ai_note[:700]}\n"
         "**NO BROKER ORDER SENT. No claim of actual fill or proven edge.**"
     )
     _post_bot_message(message)
@@ -101,7 +101,7 @@ def send_discord(candidate: Candidate, ai_note: str) -> None:
 def send_discord_test() -> None:
     """Explicit operator-initiated test; does not use historical or live candles."""
     _post_bot_message(
-        "**XAUBOT | DISCORD BOT CONNECTIVITY TEST**\\n"
-        "Outbound bot-token delivery is configured.\\n"
+        "**XAUBOT | DISCORD BOT CONNECTIVITY TEST**\n"
+        "Outbound bot-token delivery is configured.\n"
         "Research-only mode: no trading signal and no MT5 order."
     )
