@@ -1,6 +1,6 @@
 # Xaubot: XAUUSD research and strategy laboratory
 
-**Release 0.1.0 is research-only. It cannot place MT5 orders.** The original GWS methodology has not been independently verified or shown profitable.
+**The current research release is paper-only. It cannot place MT5 orders.** The original GWS methodology has not been independently verified or shown profitable.
 
 ## Included
 - 1 provisional GWS-like main model, based on overlapping technical zones and M5 confirmation.
@@ -8,18 +8,21 @@
 - Closed-bar UTC M1/M5/H1/H4/D1 calculations, FVGs, order blocks, role flips, liquidity sweeps and structural targets.
 - Isolated abstract paper simulations with 30/30/40 partial exits and SL-first intrabar ambiguity.
 - Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
-- Unit tests and Docker Compose for a VPS.
+- Read-only MT5 historical M1 exporter (on a machine with a running MT5 terminal),
+  atomic price CSV and origin manifest. Details in [MT5 feed guide](docs/MT5_FEED.md).
+- Optional read-only Discord slash commands: `/status`, `/signals`, `/leaderboard`, `/strategies`.
+- Paper research summaries and unit tests with Docker Compose for a VPS.
 
-**Not included:** native MT5 price collector, live execution, broker-valid lot sizing, commissions, swap, news controls, tick-accurate outcomes, GWS Telegram ground-truth matching, calibrated AI probabilities or verified trading performance. The 200 strategies are research hypotheses, not validated edges.
+**Not included:** native MT5 tick/bid-ask collector inside Docker, live execution, broker-valid lot sizing, commissions, swap, news controls, tick-accurate outcomes, GWS Telegram ground-truth matching, calibrated AI probabilities or verified trading performance. The 200 strategies are research hypotheses, not validated edges.
 
 ## VPS deployment (Ubuntu with Docker and Compose)
 
 1. Clone: `git clone https://github.com/Dannymccance/Xaubot.git && cd Xaubot`
 2. Configure: `cp .env.example .env && mkdir -p data`
-3. Write completed UTC XAUUSD one-minute broker candles to `data/xauusd_m1.csv` using your own MT5 exporter or trusted data source. **This first release does not capture or download prices.** Without the feed, the service logs an error and continues to wait.
+3. Write completed UTC XAUUSD one-minute broker candles to `data/xauusd_m1.csv` using the included [read-only terminal-side exporter](docs/MT5_FEED.md), or a trusted equivalent data source. The terminal-side exporter does **not** run automatically inside Docker. Without the CSV feed, the scanner logs an error and continues to wait.
 4. Start: `docker compose up -d --build`
 5. Check: `docker compose logs --tail=100 -f xaubot`
-6. Candidate journal: `data/candidates.json`
+6. Candidate journal: `data/candidates.json`. Current research status: `docker compose exec xaubot python -m xaubot report status --data-dir /app/data`.
 
 ### Connect your Discord bot and optional AI
 
@@ -39,6 +42,32 @@ docker compose run --rm xaubot python -m xaubot discord-test
 Only fresh `GWS_PRIMARY` paper candidates are posted. The 200 challengers remain silent. The Discord REST transport sends as your **bot identity**, not a webhook. A Gateway listener and slash commands are not implemented in this first release; those can be added without changing bot credentials.
 
 For optional AI explanations, set `OPENAI_API_KEY` and `OPENAI_MODEL` to a Responses-API-compatible model available on your API account. AI output is limited to a short qualitative explanation; it cannot modify trades, stops, prices or any execution logic. Missing credentials are handled by a deterministic, AI-free signal.
+
+### Enable read-only Discord commands later
+
+The outbound alerts and the interactive bot use the same existing Discord
+application and `DISCORD_BOT_TOKEN`, not webhooks. Slash commands need these
+settings on the VPS, whenever you are ready: `DISCORD_GUILD_ID` for the
+single authorised server, and `DISCORD_CHANNEL_ID` for the authorised channel.
+The Discord install should include the `bot` and `applications.commands`
+scopes with View Channel and Send Messages access; no Administrator or
+message-content privileged intent is needed.
+
+The slash command service is **off by default** and runs in a separate
+container that reads `./data` in read-only mode. Once the bot is invited
+and credentials are configured, start it with:
+
+```bash
+docker compose --profile commands up -d --build
+```
+
+Slash commands available to authorised users in the configured channel:
+`/status` checks last closed MT5 candle timestamp, `/signals` shows
+the latest primary *paper* candidate, `/leaderboard` ranks only experimental
+paper portfolios with at least 20 fully closed ideas, and `/strategies`
+shows the 201-strategy registry. Replies are ephemeral. They do not place
+trades or change strategy configuration. No credentials are needed to run
+unit tests or offline reports.
 
 ### Required price-feed format
 
@@ -72,6 +101,8 @@ python3 -m unittest discover -s tests -v
 python3 -m xaubot strategies
 python3 -m xaubot scan --csv data/xauusd_m1.csv --out data/candidates.json
 python3 -m xaubot backtest --csv data/xauusd_m1.csv --out data/backtest.json
+python3 -m xaubot report status --data-dir data
+python3 -m xaubot report leaderboard --data-dir data
 ```
 
 The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, margin, swaps, commissions and order rejection; its reported P&L is **not broker-executable**. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
