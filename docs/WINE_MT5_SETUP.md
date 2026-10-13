@@ -137,7 +137,39 @@ are known.
 ## Part D2: Keep the converter running under systemd (Ubuntu VPS)
 
 Only after the one-off import has succeeded and the **correct UTC offset has
-been verified**, deploy the checked-in systemd service. The provided unit
+been verified**, deploy the checked-in systemd service.
+
+### Critical: allow the sandboxed service to read the Wine source CSV
+
+The bridge's systemd unit intentionally has `CapabilityBoundingSet=` empty.
+Even though it runs as root, it **does not** inherit root's usual permission
+bypass capabilities. The Wine prefix belongs to the private `xaumt5` user,
+so the service can start but emit `PermissionError: [Errno 13]` when reading
+the CSV. A non-service root shell might read it without a problem.
+
+Do not `chmod 777` the Wine folders and do not restore broad DAC-bypass
+capabilities to the systemd service. Instead, grant the service's root UID
+**traversal** along the exact source path and **read-only** access to the
+single exported CSV with POSIX ACLs:
+
+```bash
+cd /root/Xaubot
+apt install -y acl
+bash deploy/prepare-wine-bridge-acl.sh
+systemctl restart xaubot-wine-bridge.service
+sleep 3
+journalctl -u xaubot-wine-bridge.service -n 25 --no-pager
+```
+
+The script verifies the expected file and owner, never touches existing MT5
+accounts or broker credentials, and installs a default ACL on the `Files`
+directory. The default ACL is important because the MQL5 exporter atomically
+replaces its CSV with a new file from the same directory every refresh.
+
+If the service continues reporting permission errors, inspect
+`namei -l` and `getfacl` for the exact source path and send the
+redacted output for diagnosis. Keep Discord alerts disabled until the feed
+has verified fresh, advancing timestamps. The provided unit
 matches the current `/root/Xaubot` directory, the dedicated `xaumt5`
 Wine prefix and the MetaQuotes-Demo symbol `XAUUSD`.
 
