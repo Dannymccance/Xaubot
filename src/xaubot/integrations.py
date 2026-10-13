@@ -43,27 +43,65 @@ def ai_commentary(candidate: Candidate) -> str:
         return f"AI unavailable ({type(error).__name__}); deterministic alert unchanged."
 
 
+def _post_bot_message(content: str) -> None:
+    """Send via the Discord application's bot identity, not a webhook.
+
+    This REST-only outbound path does not require a Discord Gateway connection,
+    privileged intents or a slash-command listener.
+    """
+    token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+    channel_id = os.getenv("DISCORD_CHANNEL_ID", "").strip()
+    if not token:
+        raise RuntimeError("DISCORD_BOT_TOKEN is not configured")
+    if not channel_id or not channel_id.isascii() or not channel_id.isdecimal() or not 15 <= len(channel_id) <= 24:
+        raise RuntimeError("DISCORD_CHANNEL_ID must be a numeric Discord channel ID")
+    payload = json.dumps({
+        "content": content[:1900],
+        "allowed_mentions": {"parse": []},
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://discord.com/api/v10/channels/{channel_id}/messages",
+        data=payload,
+        headers={
+            "Authorization": f"Bot {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Xaubot/0.1",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            if response.status not in (200, 201):
+                raise RuntimeError(f"Discord bot message rejected (HTTP {response.status})")
+    except urllib.error.HTTPError as exc:
+        # Do not expose response bodies, tokens or credential-bearing request objects.
+        raise RuntimeError(f"Discord bot message rejected (HTTP {exc.code})") from None
+    except urllib.error.URLError:
+        raise RuntimeError("Discord bot transport failed") from None
+
+
 def send_discord(candidate: Candidate, ai_note: str) -> None:
-    webhook = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-    if not webhook:
-        raise RuntimeError("DISCORD_WEBHOOK_URL is not set")
+    """Post the primary paper candidate through the authorised Discord bot."""
     side = "BUY" if candidate.side == 1 else "SELL"
     message = (
-        f"**XAUBOT | GWS-STYLE {side} | PAPER CANDIDATE**\n"
-        f"UTC close: {candidate.timestamp.isoformat()} | ID: {candidate.event_id}\n"
+        f"**XAUBOT | GWS-STYLE {side} | PAPER CANDIDATE**\\n"
+        f"UTC close: {candidate.timestamp.isoformat()} | ID: {candidate.event_id}\\n"
         f"Entry hypothesis: {candidate.entry_low:.2f} to {candidate.entry_high:.2f} "
-        f"(reference {candidate.ref_price:.2f})\n"
+        f"(reference {candidate.ref_price:.2f})\\n"
         f"SL: {candidate.stop:.2f} | TP1: {candidate.tp1:.2f} | "
-        f"TP2: {candidate.tp2:.2f} | TP3: {candidate.tp3:.2f}\n"
-        f"TP3 basis: {candidate.tp3_source} | Research score (NOT probability): {candidate.score}\n"
-        f"Logic: {candidate.rationale}\n"
-        f"AI advisory: {ai_note[:700]}\n"
+        f"TP2: {candidate.tp2:.2f} | TP3: {candidate.tp3:.2f}\\n"
+        f"TP3 basis: {candidate.tp3_source} | Research score (NOT probability): {candidate.score}\\n"
+        f"Logic: {candidate.rationale}\\n"
+        f"AI advisory: {ai_note[:700]}\\n"
         "**NO BROKER ORDER SENT. No claim of actual fill or proven edge.**"
     )
-    payload = json.dumps({"content": message[:1900], "allowed_mentions": {"parse": []}}).encode()
-    req = urllib.request.Request(webhook, data=payload,
-                                 headers={"Content-Type": "application/json", "User-Agent": "Xaubot/0.1"},
-                                 method="POST")
-    with urllib.request.urlopen(req, timeout=15) as response:
-        if response.status not in (200, 204):
-            raise RuntimeError("Discord rejected the webhook request")
+    _post_bot_message(message)
+
+
+def send_discord_test() -> None:
+    """Explicit operator-initiated test; does not use historical or live candles."""
+    _post_bot_message(
+        "**XAUBOT | DISCORD BOT CONNECTIVITY TEST**\\n"
+        "Outbound bot-token delivery is configured.\\n"
+        "Research-only mode: no trading signal and no MT5 order."
+    )
