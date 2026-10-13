@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .engine import Bar, Candidate, evaluate, read_m1, strategies
 from .integrations import ai_commentary, send_discord, send_discord_test
+from .reporting import leaderboard_report, signals_report, status_report, strategies_report
 
 UTC = timezone.utc
 
@@ -146,7 +147,8 @@ def replay(bars: list[Bar], spread: float = .4, slippage: float = .05,
         for name,row in accounts.items()
     ]
     return {"metadata":{"mode":"RESEARCH_PAPER_ONLY","strategy_count":len(names),
-                        "input_bar_count":len(bars),"spread_assumption":spread,
+                        "input_bar_count":len(bars),"initial_equity":initial_equity,
+                        "spread_assumption":spread,
                         "slippage_assumption":slippage,"be_after_tp1":be_after_tp1,
                         "note":"Abstract ounces, no commission, swaps, minimum lot or broker fills; not deployable PnL"},
             "strategies":scoreboard,"events":events}
@@ -204,6 +206,9 @@ def main() -> None:
     bt.add_argument("--risk",type=float,default=.005)
     bt.add_argument("--be-after-tp1",action="store_true")
     sub.add_parser("discord-test",help="send an explicit Discord bot connectivity test")
+    rp = sub.add_parser("report",help="inspect saved paper research reports")
+    rp.add_argument("kind",choices=("status","signals","leaderboard","strategies"))
+    rp.add_argument("--data-dir",type=Path,default=Path("data"))
     reg = sub.add_parser("strategies",help="list primary and challengers")
     args = parser.parse_args()
     if args.command == "discord-test":
@@ -213,6 +218,13 @@ def main() -> None:
             print("Discord bot test failed. Check token, channel ID and bot permissions.",file=sys.stderr)
             raise SystemExit(1) from None
         print("Discord bot test message accepted by Discord.")
+        return
+    if args.command == "report":
+        reports = {"status":lambda:status_report(args.data_dir),
+                   "signals":lambda:signals_report(args.data_dir),
+                   "leaderboard":lambda:leaderboard_report(args.data_dir),
+                   "strategies":strategies_report}
+        print(reports[args.kind]())
         return
     if args.command == "strategies":
         print(json.dumps({"count":len(strategies()),"ids":strategies()},indent=2))
@@ -233,6 +245,8 @@ def main() -> None:
             result = once(bars,args.send_discord or os.getenv("XAUBOT_SEND_DISCORD","0") == "1",args.state)
             if args.out:
                 _write_json_atomic(args.out,{"generated_at":datetime.now(UTC).isoformat(),
+                                             "last_m1_open_utc":bars[-1].time.isoformat(),
+                                             "last_m1_close_utc":(bars[-1].time+timedelta(minutes=1)).isoformat(),
                                              "candidates":result})
             if not args.watch:
                 print(json.dumps(result,indent=2))
