@@ -229,7 +229,7 @@ def main() -> None:
                 print(json.dumps(result,indent=2))
                 break
         except (OSError,ValueError,RuntimeError,json.JSONDecodeError) as error:
-            print(f"Xaubot scan error ({type(error).__name__}): {error}",file=sys.stderr)
+            print(f"Xaubot scan error ({type(error).__name__}). Verify M1 feed, UTC timestamps and integration settings; URLs and secrets are not logged.",file=sys.stderr)
             if not args.watch:
                 raise SystemExit(1) from error
         time.sleep(args.poll)
