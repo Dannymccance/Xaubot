@@ -101,13 +101,16 @@ The feed must be monotonically ordered and include enough completed higher-timef
 python3 -m pip install -e .
 python3 -m unittest discover -s tests -v
 python3 -m xaubot strategies
+python3 -m xaubot audit --csv data/xauusd_m1.csv --out data/feed_audit.json
 python3 -m xaubot scan --csv data/xauusd_m1.csv --out data/candidates.json
 python3 -m xaubot backtest --csv data/xauusd_m1.csv --out data/backtest.json
 python3 -m xaubot report status --data-dir data
 python3 -m xaubot report leaderboard --data-dir data
 ```
 
-The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, margin, swaps, commissions and order rejection; its reported P&L is **not broker-executable**. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
+Before comparing paper results, run `xaubot audit` to fingerprint the exact CSV and identify source, broker time-offset, gaps, and stale data. This audit cannot independently certify that UTC+2 was the correct broker offset for September and October: verify that separately. Missing candles can reflect market closures rather than connectivity faults. The `backtest` command stores the audit in `backtest.json.metadata.feed_audit` and aborts if the CSV changes while it is running, instead of silently misattributing a replay to a new dataset.
+
+The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, margin, swaps, commissions and order rejection; its reported P&L is **not broker-executable**. A replay of the same data used to design a strategy is exploratory, not out-of-sample validation. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
 
 ## Known limitations and next steps
 

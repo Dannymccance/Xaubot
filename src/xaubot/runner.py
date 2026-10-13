@@ -14,6 +14,7 @@ from pathlib import Path
 from .engine import Bar, Candidate, evaluate, read_m1, strategies
 from .integrations import ai_commentary, send_discord, send_discord_test
 from .reporting import leaderboard_report, signals_report, status_report, strategies_report
+from .feed_audit import audit_feed, feed_sha256
 
 UTC = timezone.utc
 
@@ -197,6 +198,9 @@ def main() -> None:
     sc.add_argument("--state",type=Path,default=Path("data/discord_seen.json"))
     sc.add_argument("--watch",action="store_true")
     sc.add_argument("--poll",type=int,default=30)
+    aud = sub.add_parser("audit",help="audit UTC M1 input, provenance and gaps without running a backtest")
+    aud.add_argument("--csv",required=True,type=Path)
+    aud.add_argument("--out",type=Path)
     bt = sub.add_parser("backtest",help="historical shadow portfolios, no orders")
     bt.add_argument("--csv",required=True,type=Path)
     bt.add_argument("--out",type=Path,default=Path("data/backtest.json"))
@@ -229,9 +233,22 @@ def main() -> None:
     if args.command == "strategies":
         print(json.dumps({"count":len(strategies()),"ids":strategies()},indent=2))
         return
+    if args.command == "audit":
+        bars = read_m1(args.csv)
+        audit = audit_feed(args.csv,bars)
+        if args.out:
+            _write_json_atomic(args.out,audit)
+        print(json.dumps(audit,indent=2))
+        return
     if args.command == "backtest":
         bars = read_m1(args.csv)
+        audit = audit_feed(args.csv,bars)
         result = replay(bars,args.spread,args.slippage,args.equity,args.risk,args.be_after_tp1)
+        # The systemd bridge may append to the CSV during a long replay.
+        # Never attribute a replay snapshot to an input SHA that has changed.
+        if feed_sha256(args.csv) != audit["input_csv_sha256"]:
+            raise SystemExit("M1 feed changed during replay: retry with a frozen CSV snapshot")
+        result["metadata"]["feed_audit"] = audit
         _write_json_atomic(args.out,result)
         print(json.dumps({"output":str(args.out),"strategies":len(result["strategies"]),
                           "events":len(result["events"]),
