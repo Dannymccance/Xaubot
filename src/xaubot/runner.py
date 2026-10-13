@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .engine import Bar, Candidate, evaluate, read_m1, strategies
-from .integrations import ai_commentary, send_discord
+from .integrations import ai_commentary, send_discord, send_discord_test
 
 UTC = timezone.utc
 
@@ -203,8 +203,17 @@ def main() -> None:
     bt.add_argument("--equity",type=float,default=1000.)
     bt.add_argument("--risk",type=float,default=.005)
     bt.add_argument("--be-after-tp1",action="store_true")
+    sub.add_parser("discord-test",help="send an explicit Discord bot connectivity test")
     reg = sub.add_parser("strategies",help="list primary and challengers")
     args = parser.parse_args()
+    if args.command == "discord-test":
+        try:
+            send_discord_test()
+        except RuntimeError:
+            print("Discord bot test failed. Check token, channel ID and bot permissions.",file=sys.stderr)
+            raise SystemExit(1) from None
+        print("Discord bot test message accepted by Discord.")
+        return
     if args.command == "strategies":
         print(json.dumps({"count":len(strategies()),"ids":strategies()},indent=2))
         return
