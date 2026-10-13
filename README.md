@@ -7,6 +7,7 @@
 - 200 deterministic challenger configurations: 10 SMC-related families, 4 confirmation profiles and 5 timing profiles, each with a separate experimental strategy ID.
 - Closed-bar UTC M1/M5/H1/H4/D1 calculations, FVGs, order blocks, role flips, liquidity sweeps and structural targets.
 - Isolated abstract paper simulations with 30/30/40 partial exits and SL-first intrabar ambiguity, plus a configurable simplified USD initial-margin gate defaulting to **1:200 maximum leverage**. This is not broker lot sizing or margin liquidation.
+- **Optional DKCapital V2-inspired GBP paper mode** for all 201 models: independently funded £1,000 paper accounts; 3 distinct 30/30/40 paper TP legs; size 0.01 lots per complete £100; Friday 0.01 × 3; £75 per group and £150 gross open group stop risk per paper account; simplified 1:200 margin and TP1-triggered paper breakeven. Requires explicit FX and broker XAUUSD contract/lot inputs. **Xaubot-generated stops are not GWS/Elite provider-supplied stops**. See [DKCapital paper settings](docs/DKCAPITAL_PAPER_RULES.md).
 - Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
 - Read-only MT5 historical M1 exporter (on a machine with a running MT5 terminal),
   atomic price CSV and origin manifest. Details in [MT5 feed guide](docs/MT5_FEED.md).
@@ -112,6 +113,23 @@ python3 -m xaubot report leaderboard --data-dir data
 Before comparing paper results, run `xaubot audit` to fingerprint the exact CSV and identify source, broker time-offset, gaps, and stale data. This audit cannot independently certify that UTC+2 was the correct broker offset for September and October: verify that separately. Missing candles can reflect market closures rather than connectivity faults. The `backtest` command stores the audit in `backtest.json.metadata.feed_audit` and aborts if the CSV changes while it is running, instead of silently misattributing a replay to a new dataset.
 
 The backtest allocates 0.5% theoretical per-idea risk and by default checks **1:200 simplified initial margin** (`USD gold entry price × theoretical ounces ÷ 200`). Each strategy has its own independent $1,000-equity paper account. Trades requiring more initial margin than the account's realised equity are rejected and counted, and the output records maximum notional exposure, peak initial margin and margin use. **Leverage does not multiply P&L by 200:** exposure still derives from the 0.5% stop-risk budget. Real broker XAUUSD margin tiers, contract size, minimum lots/steps, unrealised equity, maintenance margin, stop-outs, swaps, commissions and order rejection are not modelled; its reported P&L is **not broker-executable**. A replay of the same data used to design a strategy is exploratory, not out-of-sample validation. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
+
+### DKCapital V2-inspired risk rules for 201 Xaubot experiments
+
+Existing DKCapital MT5 trading services are **not touched**. To compare all
+201 Xaubot strategies under DKCapital's paper-sized lots, three TP legs,
+Friday restriction, GBP75 per-group/GBP150 per-paper-account planned
+stop budgets and **1:200 maximum leverage**, run
+`python -m xaubot backtest --risk-model dkcapital` with an explicit
+USD-per-GBP reference rate and the broker's XAUUSD contract/lot settings.
+The separate output can be ranked via
+`python -m xaubot report leaderboard --backtest-file <path>`.
+
+Unlike DKCapital's provider signals, each Xaubot stop and target is an
+internally generated, **unverified research hypothesis**. No real
+provider SL/TP or broker fill is claimed. See
+[DKCapital paper mode](docs/DKCAPITAL_PAPER_RULES.md) before interpreting
+the results or selecting a configuration.
 
 ### Opt-in independent forward candidate study
 
