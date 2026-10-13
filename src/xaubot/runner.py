@@ -274,10 +274,22 @@ def main() -> None:
     bt.add_argument("--leverage",type=float,default=200.,
                     help="Maximum account leverage for simplified USD initial-margin check (default 200 = 1:200)")
     bt.add_argument("--be-after-tp1",action="store_true")
+    bt.add_argument("--risk-model",choices=("legacy","dkcapital"),default="legacy",
+                    help="legacy: prior theoretical ounces; dkcapital: GBP balance, 3 lots/TPs and GBP 75/150 risk limits")
+    bt.add_argument("--usd-per-gbp",type=float,
+                    help="required explicit USD per GBP conversion for DKcapital paper model; single-rate hypothesis")
+    bt.add_argument("--contract-oz-per-lot",type=float,
+                    help="required MT5 broker XAUUSD contract ounces per 1 lot for DKcapital")
+    bt.add_argument("--lot-min",type=float,
+                    help="required MT5 broker symbol minimum XAUUSD lot")
+    bt.add_argument("--lot-step",type=float,
+                    help="required MT5 broker symbol XAUUSD volume step")
     sub.add_parser("discord-test",help="send an explicit Discord bot connectivity test")
     rp = sub.add_parser("report",help="inspect saved paper research reports")
     rp.add_argument("kind",choices=("status","signals","leaderboard","strategies"))
     rp.add_argument("--data-dir",type=Path,default=Path("data"))
+    rp.add_argument("--backtest-file",type=Path,
+                    help="optional explicit historical paper JSON to rank instead of data/backtest.json")
     reg = sub.add_parser("strategies",help="list primary and challengers")
     args = parser.parse_args()
     if args.command == "discord-test":
@@ -291,7 +303,7 @@ def main() -> None:
     if args.command == "report":
         reports = {"status":lambda:status_report(args.data_dir),
                    "signals":lambda:signals_report(args.data_dir),
-                   "leaderboard":lambda:leaderboard_report(args.data_dir),
+                   "leaderboard":lambda:leaderboard_report(args.data_dir,backtest_file=args.backtest_file),
                    "strategies":strategies_report}
         print(reports[args.kind]())
         return
@@ -308,8 +320,32 @@ def main() -> None:
     if args.command == "backtest":
         bars = read_m1(args.csv)
         audit = audit_feed(args.csv,bars)
-        result = replay(bars,args.spread,args.slippage,args.equity,args.risk,
-                        args.be_after_tp1,args.leverage)
+        if args.risk_model == "dkcapital":
+            from .dk_paper import DKPaperSettings, replay_dkcapital
+            required = {
+                "--usd-per-gbp":args.usd_per_gbp,
+                "--contract-oz-per-lot":args.contract_oz_per_lot,
+                "--lot-min":args.lot_min,
+                "--lot-step":args.lot_step,
+            }
+            missing = [name for name,value in required.items() if value is None]
+            if missing:
+                parser.error("DKCapital paper backtest requires broker/FX assumptions: " + ", ".join(missing))
+            if args.equity != 1000:
+                parser.error("DKCapital GBP 75/150 exposure ceiling is agreed only for GBP 1,000 initial accounts")
+            if args.risk != .005 or args.be_after_tp1:
+                parser.error("DKCapital model manages 3 legs and TP1 breakeven; do not set legacy --risk or --be-after-tp1")
+            settings = DKPaperSettings(
+                usd_per_gbp=args.usd_per_gbp,
+                contract_oz_per_lot=args.contract_oz_per_lot,
+                lot_min=args.lot_min,lot_step=args.lot_step,
+                leverage=args.leverage, initial_gbp=args.equity,
+                spread_usd=args.spread,slippage_usd=args.slippage,
+            )
+            result = replay_dkcapital(bars,settings)
+        else:
+            result = replay(bars,args.spread,args.slippage,args.equity,args.risk,
+                            args.be_after_tp1,args.leverage)
         # The systemd bridge may append to the CSV during a long replay.
         # Never attribute a replay snapshot to an input SHA that has changed.
         if feed_sha256(args.csv) != audit["input_csv_sha256"]:
@@ -318,6 +354,7 @@ def main() -> None:
         _write_json_atomic(args.out,result)
         print(json.dumps({"output":str(args.out),"strategies":len(result["strategies"]),
                           "events":len(result["events"]),
+                          "risk_model":result["metadata"].get("risk_model","legacy"),
                           "warning":result["metadata"]["note"]},indent=2))
         return
     if args.poll < 5:
