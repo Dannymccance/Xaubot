@@ -21,3 +21,15 @@ services:
       - /app/data/candidates.json
       - --state
       - /app/data/discord_seen.json
+
+  commands:
+    build: .
+    profiles: ["commands"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      XAUBOT_DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data:ro
+    command: ["python", "-m", "xaubot.discord_commands"]
+    # Slash commands are explicitly read-only; no MT5 or broker connection.
