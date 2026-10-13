@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 import time
@@ -25,6 +26,8 @@ class PaperPosition:
     entry: float
     stop: float
     ounces: float        # theoretical, NOT a broker-valid lot size
+    initial_margin_usd: float = 0.0
+    realised_pnl_rounded: float = 0.0
     remaining: float = 1.0
     hit_tp1: bool = False
     hit_tp2: bool = False
@@ -78,15 +81,37 @@ def settle(pos: PaperPosition, b: Bar, spread: float, slippage: float, be_after_
     return events
 
 
+def initial_margin_usd(price: float, ounces: float, leverage: float) -> float:
+    """Simplified XAUUSD account in USD: notional USD / maximum allowed leverage.
+
+    This does NOT force 200x position exposure. Brokers can use symbol-specific
+    margin, contract specifications or tiered leverage instead.
+    """
+    if (not all(math.isfinite(x) for x in (price, ounces, leverage))
+            or price <= 0 or ounces <= 0 or leverage < 1):
+        raise ValueError("Invalid notional or leverage in paper margin model")
+    return price * ounces / leverage
+
+
 def replay(bars: list[Bar], spread: float = .4, slippage: float = .05,
            initial_equity: float = 1000., risk_fraction: float = .005,
-           be_after_tp1: bool = False) -> dict:
-    """Isolated abstract-oz portfolios. No broker-min-lot feasibility assumed."""
-    if not (initial_equity > 0 and 0 < risk_fraction <= .02 and spread >= 0 and slippage >= 0):
-        raise ValueError("invalid paper simulation parameters")
+           be_after_tp1: bool = False, leverage: float = 200.) -> dict:
+    """Independent paper portfolios, with a basic 1:200 initial-margin gate.
+
+    P&L still depends on theoretical ounces and price movement, NOT directly
+    on the leverage number. No broker lot-step or maintenance-margin model.
+    """
+    if not (all(math.isfinite(x) for x in
+                (initial_equity, risk_fraction, spread, slippage, leverage))
+            and initial_equity > 0 and 0 < risk_fraction <= .02
+            and spread >= 0 and slippage >= 0 and 1 <= leverage <= 1000):
+        raise ValueError("invalid paper simulation parameters or leverage")
     names = strategies()
     accounts = {s: {"equity":initial_equity,"peak":initial_equity,"max_dd_pct":0.,
-                    "signals":0,"trades":0,"closed":0,"wins":0,"pnl":0.} for s in names}
+                    "signals":0,"trades":0,"closed":0,"wins":0,"pnl":0.,
+                    "margin_rejected":0,"peak_initial_margin_usd":0.,
+                    "peak_margin_utilization_pct":0., "peak_notional_usd":0.,
+                    "peak_effective_leverage":0.} for s in names}
     opened: dict[str,PaperPosition] = {}
     pending: dict[str,Candidate] = {}
     cooldown: dict[str,datetime] = {}
@@ -104,18 +129,51 @@ def replay(bars: list[Bar], spread: float = .4, slippage: float = .05,
             if risk_per_oz <= 0 or (cand.tp1-entry)*cand.side <= 0:
                 continue
             risk_budget = account["equity"] * risk_fraction
+            if risk_budget <= 0:
+                continue
             ounces = risk_budget / risk_per_oz
-            opened[name] = PaperPosition(cand,entry,cand.stop,ounces)
+            required_margin = initial_margin_usd(entry, ounces, leverage)
+            notional = entry * ounces
+            # Accounts are independently modelled; each strategy has at most
+            # one open position at a time. No cross-strategy margin is pooled.
+            if required_margin > account["equity"]:
+                account["margin_rejected"] += 1
+                events.append({"type":"MARGIN_REJECT","strategy":name,
+                               "time":bar.time.isoformat(),"idea":cand.event_id,
+                               "requested_margin_usd":round(required_margin,4),
+                               "available_equity_usd":round(account["equity"],4),
+                               "leverage":leverage})
+                continue
+            opened[name] = PaperPosition(cand,entry,cand.stop,ounces,
+                                         initial_margin_usd=required_margin)
+            account["peak_initial_margin_usd"] = max(
+                account["peak_initial_margin_usd"],required_margin)
+            account["peak_notional_usd"] = max(
+                account["peak_notional_usd"],notional)
+            account["peak_margin_utilization_pct"] = max(
+                account["peak_margin_utilization_pct"],
+                100 * required_margin / account["equity"])
+            account["peak_effective_leverage"] = max(
+                account["peak_effective_leverage"],
+                notional / account["equity"])
             account["trades"] += 1
             events.append({"type":"OPEN","strategy":name,"time":bar.time.isoformat(),
                            "entry":entry,"idea":cand.event_id,
-                           "theoretical_oz":ounces,"risk_usd":risk_budget})
+                           "theoretical_oz":ounces,"risk_usd":risk_budget,
+                           "notional_usd":round(notional,4),
+                           "initial_margin_usd":round(required_margin,4),
+                           "margin_utilization_pct":round(
+                               100*required_margin/account["equity"],4),
+                           "leverage":leverage})
         for name, position in list(opened.items()):
             account = accounts[name]
             for qty, exit_px, reason in settle(position,bar,spread,slippage,be_after_tp1):
                 pnl = (exit_px-position.entry)*position.candidate.side*position.ounces*qty
                 account["equity"] += pnl
                 account["pnl"] += pnl
+                # Accumulate only this idea's realised P&L instead of scanning
+                # the entire event history at each close (quadratic cost).
+                position.realised_pnl_rounded += round(pnl,4)
                 account["peak"] = max(account["peak"],account["equity"])
                 account["max_dd_pct"] = max(account["max_dd_pct"],
                             (account["peak"]-account["equity"])/account["peak"]*100)
@@ -123,10 +181,8 @@ def replay(bars: list[Bar], spread: float = .4, slippage: float = .05,
                                "idea":position.candidate.event_id,"realised_pnl":round(pnl,4)})
             if position.remaining < 1e-6:
                 account["closed"] += 1
-                # Realised winner count derived at idea close from all exit events.
-                idea_pnl = sum(e.get("realised_pnl",0) for e in events
-                               if e.get("strategy")==name and e.get("idea")==position.candidate.event_id)
-                account["wins"] += int(idea_pnl > 0)
+                # Preserve the former rounding convention per exit event.
+                account["wins"] += int(position.realised_pnl_rounded > 0)
                 del opened[name]
         if bar.time.minute % 5 != 4:
             continue
@@ -144,14 +200,21 @@ def replay(bars: list[Bar], spread: float = .4, slippage: float = .05,
     scoreboard = [
         {"strategy":name,**{key:round(value,5) if isinstance(value,float) else value
                              for key,value in row.items()},
-         "open_positions":int(name in opened)}
+         "open_positions":int(name in opened),
+         "open_reserved_initial_margin_usd":round(
+             opened[name].initial_margin_usd * opened[name].remaining,5)
+             if name in opened else 0.}
         for name,row in accounts.items()
     ]
     return {"metadata":{"mode":"RESEARCH_PAPER_ONLY","strategy_count":len(names),
                         "input_bar_count":len(bars),"initial_equity":initial_equity,
                         "spread_assumption":spread,
                         "slippage_assumption":slippage,"be_after_tp1":be_after_tp1,
-                        "note":"Abstract ounces, no commission, swaps, minimum lot or broker fills; not deployable PnL"},
+                        "leverage":leverage,
+                        "margin_model":"simplified USD initial margin = entry USD/oz * theoretical ounces / leverage; reject if greater than current realised USD equity",
+                        "account_model":"201 independent paper accounts; one open position per strategy; margins not pooled",
+                        "margin_limitations":"No broker-specific tiers, minimum lots, contract size, margin call or stop-out; unrealised PnL not used for free margin",
+                        "note":"1:200 maximum leverage initial margin only; abstract ounces, no commission, swaps, minimum lot or broker fills; not deployable PnL"},
             "strategies":scoreboard,"events":events}
 
 
@@ -208,6 +271,8 @@ def main() -> None:
     bt.add_argument("--slippage",type=float,default=.05)
     bt.add_argument("--equity",type=float,default=1000.)
     bt.add_argument("--risk",type=float,default=.005)
+    bt.add_argument("--leverage",type=float,default=200.,
+                    help="Maximum account leverage for simplified USD initial-margin check (default 200 = 1:200)")
     bt.add_argument("--be-after-tp1",action="store_true")
     sub.add_parser("discord-test",help="send an explicit Discord bot connectivity test")
     rp = sub.add_parser("report",help="inspect saved paper research reports")
@@ -243,7 +308,8 @@ def main() -> None:
     if args.command == "backtest":
         bars = read_m1(args.csv)
         audit = audit_feed(args.csv,bars)
-        result = replay(bars,args.spread,args.slippage,args.equity,args.risk,args.be_after_tp1)
+        result = replay(bars,args.spread,args.slippage,args.equity,args.risk,
+                        args.be_after_tp1,args.leverage)
         # The systemd bridge may append to the CSV during a long replay.
         # Never attribute a replay snapshot to an input SHA that has changed.
         if feed_sha256(args.csv) != audit["input_csv_sha256"]:
