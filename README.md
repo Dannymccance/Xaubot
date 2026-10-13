@@ -6,7 +6,7 @@
 - 1 provisional GWS-like main model, based on overlapping technical zones and M5 confirmation.
 - 200 deterministic challenger configurations: 10 SMC-related families, 4 confirmation profiles and 5 timing profiles, each with a separate experimental strategy ID.
 - Closed-bar UTC M1/M5/H1/H4/D1 calculations, FVGs, order blocks, role flips, liquidity sweeps and structural targets.
-- Isolated abstract paper simulations with 30/30/40 partial exits and SL-first intrabar ambiguity.
+- Isolated abstract paper simulations with 30/30/40 partial exits and SL-first intrabar ambiguity, plus a configurable simplified USD initial-margin gate defaulting to **1:200 maximum leverage**. This is not broker lot sizing or margin liquidation.
 - Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
 - Read-only MT5 historical M1 exporter (on a machine with a running MT5 terminal),
   atomic price CSV and origin manifest. Details in [MT5 feed guide](docs/MT5_FEED.md).
@@ -104,14 +104,14 @@ python3 -m unittest discover -s tests -v
 python3 -m xaubot strategies
 python3 -m xaubot audit --csv data/xauusd_m1.csv --out data/feed_audit.json
 python3 -m xaubot scan --csv data/xauusd_m1.csv --out data/candidates.json
-python3 -m xaubot backtest --csv data/xauusd_m1.csv --out data/backtest.json
+python3 -m xaubot backtest --csv data/xauusd_m1.csv --leverage 200 --out data/backtest.json
 python3 -m xaubot report status --data-dir data
 python3 -m xaubot report leaderboard --data-dir data
 ```
 
 Before comparing paper results, run `xaubot audit` to fingerprint the exact CSV and identify source, broker time-offset, gaps, and stale data. This audit cannot independently certify that UTC+2 was the correct broker offset for September and October: verify that separately. Missing candles can reflect market closures rather than connectivity faults. The `backtest` command stores the audit in `backtest.json.metadata.feed_audit` and aborts if the CSV changes while it is running, instead of silently misattributing a replay to a new dataset.
 
-The backtest allocates 0.5% theoretical per-idea risk but ignores minimum lots, margin, swaps, commissions and order rejection; its reported P&L is **not broker-executable**. A replay of the same data used to design a strategy is exploratory, not out-of-sample validation. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
+The backtest allocates 0.5% theoretical per-idea risk and by default checks **1:200 simplified initial margin** (`USD gold entry price × theoretical ounces ÷ 200`). Each strategy has its own independent $1,000-equity paper account. Trades requiring more initial margin than the account's realised equity are rejected and counted, and the output records maximum notional exposure, peak initial margin and margin use. **Leverage does not multiply P&L by 200:** exposure still derives from the 0.5% stop-risk budget. Real broker XAUUSD margin tiers, contract size, minimum lots/steps, unrealised equity, maintenance margin, stop-outs, swaps, commissions and order rejection are not modelled; its reported P&L is **not broker-executable**. A replay of the same data used to design a strategy is exploratory, not out-of-sample validation. Use the paper model for early logical comparisons only. Heuristic candidate score is not a probability.
 
 ### Opt-in independent forward candidate study
 
