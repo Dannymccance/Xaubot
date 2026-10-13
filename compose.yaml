@@ -33,3 +33,32 @@ services:
       - ./data:/app/data:ro
     command: ["python", "-m", "xaubot.discord_commands"]
     # Slash commands are explicitly read-only; no MT5 or broker connection.
+
+  forward:
+    build: .
+    profiles: ["forward"]
+    restart: unless-stopped
+    # Explicitly disabled until the operator has INDEPENDENTLY verified UTC offset.
+    environment:
+      XAUBOT_BROKER_OFFSET_VERIFIED: "${XAUBOT_BROKER_OFFSET_VERIFIED:-0}"
+      XAUBOT_BROKER_UTC_OFFSET_MINUTES: "${XAUBOT_BROKER_UTC_OFFSET_MINUTES:-120}"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./data:/app/data
+    network_mode: none
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    command:
+      - sh
+      - -ec
+      - >-
+        test "$$XAUBOT_BROKER_OFFSET_VERIFIED" = "1"
+        || { echo "Forward journal disabled: verify broker UTC offset first" >&2; exit 2; };
+        exec python -m xaubot.forward
+        --csv /app/data/xauusd_m1.csv
+        --state /app/data/forward_journal.json
+        --expected-offset-minutes "$$XAUBOT_BROKER_UTC_OFFSET_MINUTES"
+        --offset-verified --watch --poll 30
+    # Forward signals are append-only research, with no Discord, AI or order API.
