@@ -91,7 +91,9 @@ def _replace_text_atomic(path: Path, text: str) -> None:
 
 
 def store_feed(path: Path, bars: list[Bar], symbol: str,
-               now: datetime | None = None) -> dict:
+               now: datetime | None = None, *,
+               source: str = "MetaTrader5.copy_rates_from_pos, start_pos=1 (completed M1)",
+               broker_utc_offset_minutes: int | None = None) -> dict:
     """Validate and atomically publish both CSV and adjacent provenance manifest."""
     now = now or datetime.now(UTC)
     if not symbol or any(c in symbol for c in ("/", "\\", "\n", "\r")):
@@ -101,6 +103,10 @@ def store_feed(path: Path, bars: list[Bar], symbol: str,
         details = json.loads(manifest_path.read_text(encoding="utf-8"))
         if details.get("symbol") != symbol:
             raise ValueError("Feed manifest belongs to another MT5 symbol")
+        if details.get("source") != source:
+            raise ValueError("Feed manifest belongs to another exporter source")
+        if details.get("broker_utc_offset_minutes") != broker_utc_offset_minutes:
+            raise ValueError("Broker UTC offset has changed; stop and archive the feed before resuming")
     existing = read_m1(path) if path.exists() else []
     merged = merge_immutable(existing, bars)
     from io import StringIO
@@ -111,7 +117,8 @@ def store_feed(path: Path, bars: list[Bar], symbol: str,
         writer.writerow((b.time.isoformat().replace("+00:00", "Z"), b.open, b.high, b.low, b.close))
     _replace_text_atomic(path, buffer.getvalue())
     status = {
-        "source": "MetaTrader5.copy_rates_from_pos, start_pos=1 (completed M1)",
+        "source": source,
+        "broker_utc_offset_minutes": broker_utc_offset_minutes,
         "symbol": symbol,
         "bar_count": len(merged),
         "last_open_utc": merged[-1].time.isoformat(),
