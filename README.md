@@ -11,7 +11,7 @@
 - Optional OpenAI Responses API commentary (advisory only) and authenticated Discord bot messages for fresh primary candidates.
 - Read-only MT5 historical M1 exporter (on a machine with a running MT5 terminal),
   atomic price CSV and origin manifest. Details in [MT5 feed guide](docs/MT5_FEED.md).
-- **Ubuntu/Wine MT5 MQL5 EA exporter** (no Windows-only Python API required),
+- **Automatic discovery lab (opt-in, offline):** 200 further deterministic OB/FVG candidate filters (120 OB + 80 FVG); one new DKCapital GBP paper replay per UTC day with both normal and doubled costs; immutable OHLC feed/cache provenance, conservative R/weekly/drawdown and sample-size gates, ranked research shortlist and optional read-only fresh forward observation. Includes a separate one-shot historical MQL5 script to request hundreds of thousands of closed M1 candles without changing the live 30k Wine bridge. See [Automated discovery](docs/AUTOMATED_DISCOVERY.md).\n- **Ubuntu/Wine MT5 MQL5 EA exporter** (no Windows-only Python API required),
   with a separate UTC timestamp validation bridge. See [Wine MT5 integration](docs/WINE_MT5_SETUP.md).
 - Optional read-only Discord slash commands: `/status`, `/signals`, `/leaderboard`, `/strategies`.
 - Paper research summaries and unit tests with Docker Compose for a VPS.
@@ -96,6 +96,23 @@ timestamp,open,high,low,close
 ```
 
 The feed must be monotonically ordered and include enough completed higher-timeframe history to produce technical zones. Scanner alerts require a fresh feed (no more than 180 seconds behind UTC wall time) and refuse to notify about old historical candidates. It is not a substitute for a broker price/quote feed and must not be treated as real-time when stale.
+
+### Automated OB/FVG discovery and expanded MT5 history
+
+The default Docker scanner, 201 historical strategies and DKCapital systems
+are unchanged. Opt into a **separate one-shot historical snapshot** and a
+daily offline `optimizer` Compose profile only after following
+[docs/AUTOMATED_DISCOVERY.md](docs/AUTOMATED_DISCOVERY.md).
+
+The discovery lab tests **one new challenger per UTC day**, and its
+candidate tape is computed once from the exact frozen M1 archive. The
+lab's normal/stressed rankings use an immutable dataset, DKCapital-style
+GBP three-leg paper risk and a fixed 1:200 margin assumption. An
+opt-in systemd timer is staged but **never enabled automatically**.
+Signals sent to the existing forward journal remain research
+candidates, never broker-confirmed trades or executable fills.
+The new MT5 history Script must be compiled/run manually on the
+dedicated Xaubot terminal, not on any DKCapital terminal.
 
 ## Local and VPS research commands
 
