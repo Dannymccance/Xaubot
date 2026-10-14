@@ -87,9 +87,24 @@ def build_candidate_tape(dataset: Path, tape_path: Path) -> dict:
     if not audit["source_manifest_present"] or audit["symbol"] != "XAUUSD":
         raise ValueError("Candidate tape requires XAUUSD M1 provenance manifest")
     sha = audit["input_csv_sha256"]
+    # Both frozen base models use confirmation c1: directional M5 engulfing
+    # candle, with a larger body than the prior M5. Preselect exactly those
+    # closed-bar times in O(n) before expensive H1/H4/D1 zone evaluation.
+    # This is a necessary precondition, NOT a signal, so it cannot discard
+    # any valid OB c1 t1 or FVG c1 t2 base candidate.
+    completed_m5 = compress(bars,5,5)
+    likely_closes = set()
+    for prior, cur in zip(completed_m5,completed_m5[1:]):
+        if cur.time-prior.time != timedelta(minutes=5):
+            continue
+        if (cur.low <= prior.low and cur.high >= prior.high and
+                abs(cur.close-cur.open) > abs(prior.close-prior.open) and
+                cur.close != cur.open):
+            likely_closes.add(cur.time)
     candidate_rows = []
     for index, bar in enumerate(bars):
-        if bar.time.minute % 5 != 4:
+        if bar.time.minute % 5 != 4 or (
+                bar.time+timedelta(minutes=1) not in likely_closes):
             continue
         current = evaluate(bars[max(0,index+1-18*1440):index+1])
         base = [c for c in current if c.strategy in BASES.values()]
@@ -289,6 +304,8 @@ def run_daily(config_file: Path, *,now: datetime | None=None) -> dict:
         epoch = {
             "feed_sha256":sha,"engine_sha256":_engine_hash(),
             "variant_logic_sha256":_variant_hash(),
+            "paper_risk_engine_sha256":_hash_file(Path(__file__).with_name("dk_paper.py")),
+            "optimizer_engine_sha256":_hash_file(Path(__file__)),
             "config_sha256":config_sha,
         }
         if state_path.exists():
