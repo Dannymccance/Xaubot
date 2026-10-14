@@ -46,8 +46,18 @@ def registry() -> tuple[Variant, ...]:
                         base=BASES[family], session=session, momentum=momentum,
                         min_m5_range=minimum,
                     ))
-    assert len(out) == 200 and len({v.name for v in out}) == 200
-    return tuple(out)
+    # Interleave OB and FVG families, so one-per-day evaluation never
+    # waits 120 days before examining the competing FVG family.
+    ob = [variant for variant in out if variant.base == BASES["ob"]]
+    fvg = [variant for variant in out if variant.base == BASES["fvg"]]
+    ordered = []
+    for index in range(max(len(ob),len(fvg))):
+        if index < len(ob):
+            ordered.append(ob[index])
+        if index < len(fvg):
+            ordered.append(fvg[index])
+    assert len(ordered) == 200 and len({v.name for v in ordered}) == 200
+    return tuple(ordered)
 
 
 def _session_ok(stamp: datetime, session: str) -> bool:
