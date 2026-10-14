@@ -8,7 +8,7 @@
 #property script_show_inputs
 
 input string InpExpectedSymbol="XAUUSD";
-input int InpRequestedBars=300000;  // historical completed M1 bars requested
+input int InpRequestedBars=500000;  // historical completed M1 bars requested
 input int InpChunkBars=10000;      // older -> newer; latest forming bar excluded
 input string InpOutputName="xaubot_history_xauusd_m1_server.csv";
 
