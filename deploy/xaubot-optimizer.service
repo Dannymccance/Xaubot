@@ -1,0 +1,16 @@
+# Offline Xaubot 1-variation-per-day research; opt-in only.
+# No impact on DKcapital or Xaubot MT5 services.
+[Unit]
+Description=Xaubot offline daily OB/FVG candidate evaluation
+Requires=docker.service
+After=docker.service
+ConditionPathExists=/root/Xaubot/data/optimizer_config.json
+ConditionPathExists=/root/Xaubot/data/ob_fvg_candidate_tape.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/Xaubot
+ExecStart=/usr/bin/docker compose --profile optimizer run --rm --no-deps optimizer
+TimeoutStartSec=20h
+Nice=10
+IOSchedulingClass=idle
