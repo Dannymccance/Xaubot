@@ -78,7 +78,7 @@ class MT5HistoricalImporterTests(unittest.TestCase):
 
     def test_historical_exporter_unique_and_trade_free(self):
         source=(Path(__file__).parents[1]/"mt5/XaubotHistorySnapshot.mq5").read_text()
-        self.assertIn('InpRequestedBars=300000',source)
+        self.assertIn('InpRequestedBars=500000',source)
         self.assertIn('FileMove(tmp,FILE_COMMON,InpOutputName,FILE_COMMON|FILE_REWRITE)',source)
         self.assertIn('InpOutputName="xaubot_history_xauusd_m1_server.csv"',source)
         self.assertNotIn("OrderSend(",source)
