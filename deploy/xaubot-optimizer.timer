@@ -1,0 +1,12 @@
+# Daily UTC, one new challenger maximum, fail-closed on insufficient inputs.
+[Unit]
+Description=Xaubot daily offline strategy-discovery trial
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=600
+Unit=xaubot-optimizer.service
+
+[Install]
+WantedBy=timers.target

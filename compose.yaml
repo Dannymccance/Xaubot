@@ -59,6 +59,28 @@ services:
         exec python -m xaubot.forward
         --csv /app/data/xauusd_m1.csv
         --state /app/data/forward_journal.json
+        --optimizer-state /app/data/optimizer_lab.json
         --expected-offset-minutes "$$XAUBOT_BROKER_UTC_OFFSET_MINUTES"
         --offset-verified --watch --poll 30
     # Forward signals are append-only research, with no Discord, AI or order API.
+
+  optimizer:
+    build: .
+    profiles: ["optimizer"]
+    # Opt-in one-shot offline development replay. No login/API/Discord secrets.
+    network_mode: none
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - -m
+      - xaubot.optimizer
+      - once
+      - --config
+      - /app/data/optimizer_config.json
