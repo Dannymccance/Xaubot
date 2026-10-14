@@ -24,7 +24,7 @@ implicit backfilling and changing the existing feed can cause errors.
 Instead, `mt5/XaubotHistorySnapshot.mq5` is a completely separate,
 read-only, one-shot **Script**, not an EA:
 
-1. On the **Xa u bot-owned MetaQuotes-Demo XAUUSD terminal only**
+1. On the **Xaubot-owned MetaQuotes-Demo XAUUSD terminal only**
    (dedicated Wine user `xaumt5`), open *File -> Open Data Folder* and
    copy this source to `MQL5/Scripts`. Do not install into DKCapital
    Account 1/2 or change its EAs.
@@ -32,15 +32,15 @@ read-only, one-shot **Script**, not an EA:
    MT5 **Tools -> Options -> Charts -> Max. bars in chart** if needed,
    ensure older M1 history is locally downloaded, then run this one-shot
    script on XAUUSD.
-3. Default `InpRequestedBars=300000` and `InpChunkBars=10000`. It
+3. Default `InpRequestedBars=500000` and `InpChunkBars=10000`. It
    exports **completed M1 chart candles only**, in chronological chunks,
    into the *separate* FILE_COMMON
    `xaubot_history_xauusd_m1_server.csv`. It excludes forming bar 0.
 4. Review the MT5 *Experts* output for the actual **written** bar count
-   and oldest/newest broker timestamp. The requested 300,000 bars are
+   and oldest/newest broker timestamp. The requested 500,000 bars are
    NOT guaranteed: terminal chart limits, broker retention, available
    download and local cache can reduce it. An approximate 6-12 month
-   target may require substantially more than 300,000 weekday bars.
+   target may require substantially more than 500,000 weekday bars.
 
 The immutable raw history must be preserved. No DKCapital terminal
 service is touched or restarted.
