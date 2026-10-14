@@ -1,0 +1,10 @@
+{
+  "dataset": "/app/data/xauusd_m1_baseline_20261013.csv",
+  "cache": "/app/data/ob_fvg_candidate_tape.json",
+  "state": "/app/data/optimizer_lab.json",
+  "usd_per_gbp": 1.325,
+  "contract_oz_per_lot": 100,
+  "lot_min": 0.01,
+  "lot_step": 0.01,
+  "broker_offset_attested": false
+}
