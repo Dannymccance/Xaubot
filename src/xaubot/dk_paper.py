@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 from .engine import Bar, Candidate, evaluate, strategies
@@ -216,9 +217,17 @@ def _settle_group(group: DKGroup, bar: Bar, settings: DKPaperSettings,
             _close_leg(group, leg, bar, "PAPER_" + leg.label, settings, account, events)
 
 
-def replay_dkcapital(bars: list[Bar], settings: DKPaperSettings) -> dict:
-    """Run independent GBP 1,000 research accounts for all 201 strategies."""
-    names = strategies()
+def replay_dkcapital(bars: list[Bar], settings: DKPaperSettings,
+                     *, strategy_ids: tuple[str,...] | None = None,
+                     evaluate_candidates: Callable[[list[Bar]],list[Candidate]] | None = None) -> dict:
+    """Run GBP research; optional one-variant evaluator for daily offline discovery.
+
+    Original callers still evaluate ALL existing 201 strategies unchanged.
+    """
+    names = strategies() if strategy_ids is None else strategy_ids
+    if not names or len(set(names)) != len(names):
+        raise ValueError("Strategy IDs must be nonempty and unique")
+    evaluate_fn = evaluate if evaluate_candidates is None else evaluate_candidates
     accounts = {
         name: {"strategy":name,"balance":settings.initial_gbp,"equity":settings.initial_gbp,
                "peak":settings.initial_gbp, "max_dd_pct":0., "pnl":0., "signals":0,
@@ -314,7 +323,7 @@ def replay_dkcapital(bars: list[Bar], settings: DKPaperSettings) -> dict:
                     del by_id[group_id]
         if bar.time.minute % 5 != 4:
             continue
-        proposed = evaluate(bars[max(0,index+1-18*1440):index+1])
+        proposed = evaluate_fn(bars[max(0,index+1-18*1440):index+1])
         for cand in proposed:
             name = cand.strategy
             if name not in accounts or name in pending:
