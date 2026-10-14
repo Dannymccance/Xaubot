@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .engine import Bar, evaluate, read_m1, strategies
 from .feed_audit import audit_feed
+from .variants import filter_fresh_m5, registry
 
 UTC = timezone.utc
 VERSION = 1
@@ -72,9 +73,29 @@ def read_journal(path: Path) -> dict:
     return state
 
 
+def _lab_shortlist(path: Path | None) -> list:
+    """Read only the vetted, bounded research shortlist; never arbitrary IDs."""
+    if path is None or not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (data.get("version") != 1 or
+            data.get("mode") != "ONE_NEW_VARIANT_PER_UTC_DAY_RESEARCH_ONLY"):
+        raise ValueError("Unknown optimizer state format")
+    names = data.get("paper_forward_shortlist")
+    if not isinstance(names,list) or len(names) > 3 or len(names) != len(set(names)):
+        raise ValueError("Invalid bounded optimizer shortlist")
+    known = {v.name:v for v in registry()}
+    eligible = {r.get("variant") for r in data.get("ranking",[])
+                if r.get("status") == "SHORTLIST_FOR_INDEPENDENT_FORWARD_PAPER_TEST"}
+    if any(name not in known or name not in eligible for name in names):
+        raise ValueError("Optimizer shortlist has unknown or unqualified variants")
+    return [known[name] for name in names]
+
+
 def forward_once(csv_path: Path, state_path: Path, expected_offset_minutes: int,
                  *, offset_verified: bool,
-                 now: datetime | None = None) -> dict:
+                 now: datetime | None = None,
+                 optimizer_state_path: Path | None = None) -> dict:
     """Advance the journal from new observed bars, never from backtest history.
 
     Operator confirmation of the broker offset is mandatory, but is not an
@@ -136,6 +157,8 @@ def forward_once(csv_path: Path, state_path: Path, expected_offset_minutes: int,
     new_events = 0
     known = {record["event_id"] for record in state["events"]}
     allowed_strategies = set(strategies())
+    shortlist = _lab_shortlist(optimizer_state_path)
+    allowed_strategies.update(v.name for v in shortlist)
     for index, bar in enumerate(bars):
         close = bar.time + timedelta(minutes=1)
         if close <= prior_close or bar.time.minute % 5 != 4:
@@ -147,7 +170,12 @@ def forward_once(csv_path: Path, state_path: Path, expected_offset_minutes: int,
             skipped += 1
             continue
         fresh_m5 += 1
-        for cand in evaluate(bars[max(0, index + 1 - 18 * 1440):index + 1]):
+        historical_view = bars[max(0, index + 1 - 18 * 1440):index + 1]
+        proposed = evaluate(historical_view)
+        # Apply only point-in-time filters to same fresh M5 baseline signal.
+        for variant in shortlist:
+            proposed.extend(filter_fresh_m5(variant,historical_view,proposed[:]))
+        for cand in proposed:
             if cand.strategy not in allowed_strategies or cand.timestamp != close:
                 continue
             if cand.event_id in known:
@@ -202,6 +230,8 @@ def main() -> None:
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--poll", type=int, default=30)
     parser.add_argument("--report", action="store_true")
+    parser.add_argument("--optimizer-state",type=Path,
+                        help="optional qualified offline optimizer paper-forward shortlist")
     args = parser.parse_args()
     if args.report:
         try:
@@ -216,7 +246,8 @@ def main() -> None:
     while True:
         try:
             result = forward_once(args.csv, args.state, args.expected_offset_minutes,
-                                  offset_verified=args.offset_verified)
+                                  offset_verified=args.offset_verified,
+                                  optimizer_state_path=args.optimizer_state)
             if result["initialized"] or result["new_events"] or result["new_m5"] or result["skipped_stale_m5"]:
                 print("Xaubot forward:", json.dumps(result), flush=True)
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as err:
