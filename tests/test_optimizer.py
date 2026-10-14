@@ -33,7 +33,12 @@ def fixture_files(folder: Path,n=50):
     feed=folder/"frozen.csv"
     rows=["timestamp,open,high,low,close"]
     for i in range(n):
-        rows.append(f"{(START+timedelta(minutes=i)).isoformat()},4160,4161,4159,4160.7")
+        # Alternate a narrow bearish M5 with a directional engulfing M5:
+        # optimizer prefilter must see some genuine c1 base opportunities.
+        if (i//5)%2 == 0:
+            rows.append(f"{(START+timedelta(minutes=i)).isoformat()},4160.5,4160.8,4159.5,4160.4")
+        else:
+            rows.append(f"{(START+timedelta(minutes=i)).isoformat()},4160,4161,4159,4160.7")
     feed.write_text("\n".join(rows)+"\n",encoding="utf-8")
     (folder/"frozen.manifest.json").write_text(json.dumps({
         "source":"MQL5 read-only historical research snapshot",
